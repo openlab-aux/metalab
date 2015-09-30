@@ -1,0 +1,38 @@
+#!/bin/bash
+
+if [[ "$1" == "--help" ]]; then
+  echo "USAGE: bash checkout <folder1> <folder2> …"
+  exit 0
+fi
+
+OLD_PWD=$(pwd)
+# find all dirs with git repos in them
+git_repos=$(find ./* -exec test -d {}/.git \; -prune -print)
+# find all repository files (.repos)
+repo_files=$(find . -name ".repos" -print0 | xargs -0 -i{} realpath {})
+
+# build grep list filtering list
+greprem=
+for file in $git_repos; do
+  greprem+="-ve $(realpath $file) "
+done
+# filter for wanted folders
+grepfilter=
+for folder in "$@"; do
+  grepfilter+="-e $(realpath "$folder") "
+done
+
+
+# uses all .repo files that are not inside a .git repository
+for repolist in $(echo "$repo_files" | grep $greprem | grep $grepfilter); do
+  repolist_dir=$(dirname "$repolist")
+  # okay, replacing filenames is really brittle …
+  relpath=$(echo "$repolist_dir" | sed "s:^$OLD_PWD/:./:")
+  # enumerate all lines (repositories) in those files
+  for repo in $(<"$repolist"); do
+    pushd "$repolist_dir" > /dev/null
+    git clone "$repo" 2>/dev/null \
+      && echo -e "$relpath/: $repo"
+    popd > /dev/null
+  done
+done
