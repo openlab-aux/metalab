@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+#  The Openlab Metarepository checkout script
+#
 
 if [[ "$1" == "--help" ]]; then
   echo "USAGE: bash checkout <folder1> <folder2> …"
@@ -6,33 +9,50 @@ if [[ "$1" == "--help" ]]; then
 fi
 
 OLD_PWD=$(pwd)
+
 # find all dirs with git repos in them
 git_repos=$(find ./* -exec test -d {}/.git \; -prune -print)
+
 # find all repository files (.repos)
 repo_files=$(find . -name ".repos" -print0 | xargs -0 -i{} realpath {})
 
-# build grep list filtering list
+# prepare filter string for removing lists stored in git repos
 greprem=
 for file in $git_repos; do
   greprem+="-ve $(realpath $file) "
 done
-# filter for wanted folders
+
+# prepare the filter string to get lists in user selected folders
 grepfilter=
 for folder in "$@"; do
   grepfilter+="-e $(realpath "$folder") "
 done
 
+# Only store the repolists in user selected folders in $repolists
+repolists=$(echo "$repo_files" | grep $grepfilter)
+
+# Remove repolists stored in git repos if existing
+if [[ $greprem ]]; then
+    repolists=$(echo "$repolists" | grep $greprem)
+fi
+
 
 # uses all .repo files that are not inside a .git repository
-for repolist in $(echo "$repo_files" | grep $greprem | grep $grepfilter); do
+for repolist in $repolists ; do
+
   repolist_dir=$(dirname "$repolist")
+
   # okay, replacing filenames is really brittle …
   relpath=$(echo "$repolist_dir" | sed "s:^$OLD_PWD/:./:")
+
   # enumerate all lines (repositories) in those files
   for repo in $(<"$repolist"); do
     pushd "$repolist_dir" > /dev/null
+
     git clone "$repo" 2>/dev/null \
       && echo -e "$relpath/: $repo"
+
     popd > /dev/null
   done
+
 done
